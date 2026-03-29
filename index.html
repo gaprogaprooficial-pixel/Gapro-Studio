@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Gapro Elite IDE - Extension Engine</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root { --bg: #1e1e1e; --side: #252526; --act: #333; --txt: #ccc; --accent: #007acc; --border: #3c3c3c; }
+        * { box-sizing: border-box; }
+        body, html { margin: 0; height: 100%; background: var(--bg); color: var(--txt); font-family: 'Segoe UI', sans-serif; overflow: hidden; }
+        
+        .container { display: grid; grid-template-columns: 50px 250px 1fr; grid-template-rows: 1fr 150px 22px; height: 100vh; }
+
+        /* Barra de Actividad */
+        .activity-bar { grid-row: span 2; background: var(--act); display: flex; flex-direction: column; align-items: center; padding-top: 15px; gap: 20px; border-right: 1px solid #2b2b2b; }
+        .activity-bar i { font-size: 22px; color: #858585; cursor: pointer; transition: 0.3s; }
+        .activity-bar i.active { color: white; border-left: 3px solid white; padding-left: 10px; margin-left: -10px; }
+
+        /* Sidebar */
+        .sidebar { background: var(--side); border-right: 1px solid var(--border); overflow-y: auto; }
+        .sidebar-header { padding: 10px; font-size: 11px; font-weight: bold; color: #888; text-transform: uppercase; border-bottom: 1px solid #333; }
+        .file-item { padding: 8px 20px; cursor: pointer; font-size: 13px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid #2d2d2d; }
+        .file-item:hover { background: #2a2d2e; }
+        .file-item.active { background: #37373d; border-left: 2px solid var(--accent); }
+
+        /* Editor */
+        .main-view { display: flex; flex-direction: column; }
+        .tabs-bar { background: #2d2d2d; display: flex; height: 35px; align-items: center; border-bottom: 1px solid var(--border); }
+        .tab { padding: 8px 20px; font-size: 12px; background: var(--bg); border-right: 1px solid var(--border); }
+        #monaco-container { flex: 1; width: 100%; }
+
+        /* Botones Especiales */
+        .action-buttons { margin-left: auto; display: flex; gap: 10px; padding-right: 15px; }
+        .btn-apply { background: #6a1b9a; color: white; border: none; padding: 5px 12px; font-size: 11px; font-weight: bold; cursor: pointer; border-radius: 3px; display: flex; align-items: center; gap: 6px; }
+        .btn-run { background: #4285f4; color: white; border: none; padding: 5px 12px; font-size: 11px; font-weight: bold; cursor: pointer; border-radius: 3px; }
+
+        /* Terminal */
+        .terminal { grid-column: 2 / span 2; background: #0c0c0c; border-top: 1px solid var(--border); padding: 10px; font-family: monospace; font-size: 12px; overflow-y: auto; }
+        .term-log { margin-bottom: 3px; border-left: 2px solid #6a1b9a; padding-left: 10px; }
+
+        .status-bar { grid-column: span 3; background: var(--accent); color: white; font-size: 12px; display: flex; align-items: center; padding: 0 15px; justify-content: space-between; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="activity-bar">
+        <i class="fas fa-copy active" id="ico-files" onclick="toggleSidebar('files')"></i>
+        <i class="fas fa-th-large" id="ico-ext" onclick="toggleSidebar('ext')"></i>
+        <i class="fas fa-play" style="color: #4ec9b0; margin-top: auto; margin-bottom: 20px;" onclick="runHTML()"></i>
+    </div>
+
+    <div class="sidebar" id="side-files">
+        <div class="sidebar-header">Archivos del Proyecto</div>
+        <div class="file-item active" id="f-html" onclick="setFile('html')"><i class="fab fa-html5" style="color:#e34f26"></i> index.html</div>
+        <div class="file-item" id="f-css" onclick="setFile('css')"><i class="fab fa-css3" style="color:#264de4"></i> style.css</div>
+        <div class="file-item" id="f-js" onclick="setFile('js')"><i class="fab fa-js" style="color:#f1d863"></i> script.js</div>
+    </div>
+
+    <div class="sidebar" id="side-ext" style="display:none;">
+        <div class="sidebar-header">Marketplace Elite</div>
+        <div class="file-item" onclick="loadExtTemplate('lang')"><i class="fas fa-language"></i> English Pack</div>
+        <div class="file-item" onclick="loadExtTemplate('neon')"><i class="fas fa-flask"></i> Neon Theme</div>
+        <div class="file-item" onclick="loadExtTemplate('custom')"><i class="fas fa-plus-circle"></i> Crear Extensión</div>
+    </div>
+
+    <div class="main-view">
+        <div class="tabs-bar">
+            <div class="tab" id="tab-title">index.html</div>
+            <div class="action-buttons">
+                <button class="btn-apply" id="btn-apply" onclick="installExtension()" style="display:none;">
+                    <i class="fas fa-magic"></i> APLICAR EXTENSIÓN
+                </button>
+                <button class="btn-run" onclick="runHTML()">RUN EN GOOGLE</button>
+            </div>
+        </div>
+        <div id="monaco-container"></div>
+    </div>
+
+    <div class="terminal" id="term-box">
+        <div class="term-log" style="color:#6a1b9a">[SISTEMA] Gapro Elite OS cargado. Esperando comandos...</div>
+    </div>
+
+    <div class="status-bar" id="status-bar">
+        <div id="status-text"><i class="fas fa-code-branch"></i> Corporación Élite: Main</div>
+        <div id="pos">Lín 1, Col 1</div>
+    </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.36.1/min/vs/loader.min.js"></script>
+<script>
+    const data = {
+        'html': { lang: 'html', content: '<h1>Gapro Elite IDE</h1>\n<p>Todo funcionando al 100%.</p>' },
+        'css': { lang: 'css', content: 'body { background: #1a1a1a; color: gold; text-align: center; font-family: sans-serif; }' },
+        'js': { lang: 'javascript', content: 'console.log("Gapro Elite Script Activo");' },
+        'ext': { lang: 'javascript', content: '// Escribe tu extensión aquí y pulsa APLICAR' }
+    };
+
+    let active = 'html';
+
+    require.config({ paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.36.1/min/vs' }});
+    require(['vs/editor/editor.main'], function() {
+        window.editor = monaco.editor.create(document.getElementById('monaco-container'), {
+            value: data['html'].content,
+            language: 'html',
+            theme: 'vs-dark',
+            automaticLayout: true
+        });
+
+        window.editor.onDidChangeCursorPosition(e => {
+            document.getElementById('pos').innerText = `Lín ${e.position.lineNumber}, Col ${e.position.column}`;
+        });
+    });
+
+    // Cambiar Archivo
+    function setFile(key) {
+        data[active].content = window.editor.getValue();
+        active = key;
+        document.querySelectorAll('.file-item').forEach(el => el.classList.remove('active'));
+        document.getElementById(`f-${key}`)?.classList.add('active');
+        document.getElementById('tab-title').innerText = key + (key === 'ext' ? '.js' : (key === 'js' ? '.js' : '.' + key));
+        document.getElementById('btn-apply').style.display = key === 'ext' ? 'flex' : 'none';
+        
+        monaco.editor.setModelLanguage(window.editor.getModel(), data[key].lang);
+        window.editor.setValue(data[key].content);
+    }
+
+    // Cambiar Sidebar
+    function toggleSidebar(mode) {
+        document.getElementById('side-files').style.display = mode === 'files' ? 'block' : 'none';
+        document.getElementById('side-ext').style.display = mode === 'ext' ? 'block' : 'none';
+        document.getElementById('ico-files').classList.toggle('active', mode === 'files');
+        document.getElementById('ico-ext').classList.toggle('active', mode === 'ext');
+    }
+
+    // Cargar Plantilla de Extensión
+    function loadExtTemplate(type) {
+        let code = "";
+        if(type === 'lang') {
+            code = `// EXTENSIÓN IDIOMA INGLÉS\ndocument.getElementById('status-text').innerHTML = '<i class="fas fa-globe"></i> Elite Corp: English Active';\ndocument.querySelector('.sidebar-header').innerText = 'PROJECT FILES';\nalert('Language Updated!');`;
+        } else if(type === 'neon') {
+            code = `// EXTENSIÓN TEMA NEÓN\ndocument.getElementById('status-bar').style.background = '#00ff41';\ndocument.getElementById('status-bar').style.color = '#000';\ndocument.querySelectorAll('.file-item').forEach(el => el.style.color = '#00ff41');`;
+        } else {
+            code = `// CREAR EXTENSIÓN PERSONALIZADA\n// Ejemplo: alert("Hola Jefe");`;
+        }
+        setFile('ext');
+        window.editor.setValue(code);
+    }
+
+    // LA FUNCIÓN QUE "PONE" LA EXTENSIÓN (EJECUTAR EN EL IDE)
+    function installExtension() {
+        const code = window.editor.getValue();
+        try {
+            eval(code); // Aquí ocurre la magia: el código se vuelve real en el IDE
+            const t = document.getElementById('term-box');
+            t.innerHTML += `<div class="term-log" style="color:#00ff41">> [OK] Extensión aplicada correctamente.</div>`;
+        } catch(e) {
+            alert("Error en el código de la extensión: " + e);
+        }
+    }
+
+    // Ejecutar Proyecto en Ventana de Google
+    function runHTML() {
+        data[active].content = window.editor.getValue();
+        const html = `<html><head><style>${data['css'].content}</style></head><body>${data['html'].content}<script>${data['js'].content}<\/script></body></html>`;
+        const win = window.open("", "_blank");
+        win.document.write(html);
+        win.document.close();
+    }
+</script>
+</body>
+</html>
